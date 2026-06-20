@@ -6,19 +6,16 @@ function _init()
 	b = nil
 	bullets = {}
 	b = load_boss(63,63)
-	b.a1(b.x, b.y, 16)
 end
 
 function _update()
-	if t() % 2 == 0 then
-		b.a1(b.x, b.y,16)
-	end
-	foreach(bullets,  bullet_move)
+	foreach(bullets, bullet_move)
+	if (b) boss_moveset()
 end
 
 function _draw()
 	cls()
-	spr(b.sprite, b.x-b.w/2, b.y-b.h/2, 2,2)
+	if (b) b.draw()
 	
 	-- center
 	pset(63,63, 8)
@@ -26,19 +23,69 @@ function _draw()
 	foreach(bullets, bullet_draw)
 end
 
--- first boss
 
+
+
+-->8
+--bullets
+function bullet_create(x,y,dx,dy)
+	add(bullets, {
+			x=x,   y=y,
+			dx=dx, dy=dy,
+			w=4, h=4,
+			sprite=3,
+		}
+	)
+end
+
+function bullet_move(b)
+	b.x += b.dx
+	b.y += b.dy
+	if b.x > 128 or b.x < 0 or
+		  b.y > 128 or b.y < 0
+	then
+		del(bullets, b)
+	end
+end
+
+function bullet_draw(b)
+	spr(b.sprite,b.x,b.y)
+end
+-->8
+-- bosses
+function boss_hit()
+	b.cur_parts -= 1
+	if b.cur_parts < 1 then
+		b.dead = true
+	end
+	-- animations
+end
+
+function get_next_boss_part()
+	local i = b.max_parts - b.cur_parts + 1
+	local x = b.x
+	local y = b.y-10+i*4
+	
+	return x,y
+end
+
+
+-- first boss
 function load_boss(x,y)
 	local boss = {
 		x=x, y=y,
 		h=16, w=16,
 		sprite=1,
-		details=4,
+		max_parts=4,
+		cur_parts=4,
 		level=1,
-		a1 = basic_atack
+		draw=basic_draw,
+		a1 = basic_atack,
 	}
 	return boss
 end
+
+-- atacks!!!
 
 function basic_atack(x,y,n)
 	local angle_deg, angle_rad=0
@@ -57,28 +104,29 @@ function basic_atack(x,y,n)
 	end
 end
 
-function bullet_create(x,y,dx,dy)
-	add(bullets, {
-			x=x,   y=y,
-			dx=dx, dy=dy,
-			w=4, h=4,
-			sprite=3,
-		}
-	)
-end
-
-function bullet_move(b)
-	b.x += b.dx
-	b.y += b.dy
-	if  b.x > 128 or b.x < 0 or
-		   b.y > 128 or b.y < 0
-	then
-		del(bullets, b)
+function boss_moveset()
+	if t() % 2 == 0 then
+		b.a1(b.x, b.y,16)
+	end
+	
+	-- demo, delete this
+	if t() % 4 == 0 then
+		boss_hit()
+	end
+	
+	if b.dead then
+		b = bil
 	end
 end
 
-function bullet_draw(b)
-	spr(b.sprite,b.x,b.y)
+function basic_draw()
+	spr(b.sprite, b.x-b.w/2, b.y-b.h/2, 2,2)
+	local start = b.max_parts - b.cur_parts + 1
+	for i=start,b.max_parts do
+		local x = b.x + 4
+		local y = b.y-10+i*4
+		line(b.x-4,y,x,y,3)
+	end
 end
 __gfx__
 00000000066666666666666000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

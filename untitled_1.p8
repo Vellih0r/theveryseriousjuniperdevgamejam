@@ -18,33 +18,21 @@ hook ={
 	dy = 0,
 	tx = 0,
 	ty = 0,
-	is_moving = false
+	speed=3,
+	is_moving = false,
+	visible = false,
+	sprite = 44,
 	}
 target ={
 	x = 72, 
 	y = 32
 }
-draw_h = false
 end
 function _update()
 	move_hook(target)
 	
- if btn(⬅️) then 
- 	player.dx -= 1 
- end
- if btn(➡️) then 
- 	player.dx += 1
- 	 
- end
-	if btn(⬆️) then 
-		player.dy -= 1
-	 player.ass = true
-	else 
-		player.ass = false  
-	end
-	if btn(⬇️) then 
-		player.dy += 1 
-	end
+ player_movement()
+	
 	if btn(❎) then
 		throw_hook(player,target)
 	end
@@ -52,7 +40,6 @@ function _update()
 		delete_hook()
  end
 	
-	move_player(player)
 
 	player.dx =	mid(-1, player.dx, 1)
 
@@ -74,16 +61,41 @@ end
 -->8
 -- move player
 
-function move_player(p)
+function player_movement()
+	local p = player
+
+	if (btn(⬅️)) p.dx -= 1 
+
+ if (btn(➡️)) p.dx += 1
+ 
+	if btn(⬆️) then 
+		p.dy -= 1
+	 p.ass = true
+	else 
+		p.ass = false  
+	end
+	
+	if (btn(⬇️)) p.dy += 1
+	
+	move_player()
+end
+
+function move_player()
+	local p = player
+	
 	local next_x = p.x + p.dx 
 	
 	if p.dx > 0 then 
-		if not is_tile_flag(next_x + 7,p.y,0) and not is_tile_flag(next_x +7,p.y +7,0) then
+		if not is_tile_flag(next_x+7,p.y,0)
+		and not is_tile_flag(next_x+7,p.y+7,0)
+		then
 			p.x = next_x
 		end
 
 	elseif p.dx < 0 then 
-		if not is_tile_flag(next_x, p.y,0) and not is_tile_flag(next_x, p.y +7,0) then
+		if not is_tile_flag(next_x,p.y,0)
+		and not is_tile_flag(next_x,p.y+7,0)
+		then
 			p.x = next_x
 		end
 	end
@@ -91,20 +103,37 @@ function move_player(p)
 	local next_y = p.y + p.dy
 	
 	if p.dy > 0 then 
-		if not is_tile_flag(p.x, next_y + 7,0) and not is_tile_flag(p.x +7, next_y + 7,0) then
+		if not is_tile_flag(p.x,next_y+7,0)
+		and not is_tile_flag(p.x+7,next_y+7,0)
+		then
 			p.y = next_y
 		end
 	
 	elseif p.dy < 0 then 
-		if not is_tile_flag(p.x,next_y,0) and not is_tile_flag(p.x + 7,next_y,0) then
+		if not is_tile_flag(p.x,next_y,0)
+		and not is_tile_flag(p.x+7,next_y,0)
+		then
 			p.y = next_y
 		end 
 	end
+	-- screen edges
 	p.x = mid(0, p.x, 120)
  p.y = mid(0, p.y, 120)
 end
 -->8
 -- colision
+
+-- basic box collision
+function collide(o1,o2)
+	if o1.x < o2.x + o2.w
+	or o2.x < o1.x + o1.w
+	or o1.y < o2.y + o2.h
+	or o2.y < o1.y + o1.h
+	then
+		return true
+	end
+	return false
+end
 
 function is_tile_flag(x,y,f)
 	local map_x = flr(x / 8)
@@ -113,54 +142,59 @@ function is_tile_flag(x,y,f)
 	local tile = mget(map_x,map_y)
 	return fget(tile, f)
 end
--->8
--- player colition 
-function check_player_colition(p,f)
+
+-- player colision 
+function check_player_colition(f)
+	local p = player
 	if is_tile_flag(p.x + 1, p.y + 1, f) or
 				is_tile_flag(p.x + 6, p.y + 1, f) or 
 				is_tile_flag(p.x + 1, p.y + 6, f) or 
 				is_tile_flag(p.x + 1, p.y + 1, f) 
 	then
 			return true -- player touched this flag
-			
 	else 
 			return false	-- player doesn't touched the flag
-end			
+	end			
 end 
 -->8
+
+-->8
 -- hook
-function throw_hook(player,target)
-draw_h = true
+function throw_hook()
+	hook.visible = true
 
-hook.x = player.x + 4
-hook.y = player.y + 4
-
-local angle = atan2(target.x - hook.x,target.y - hook.y)
-
-hook.dx = cos(angle * 4)
-hook.dy = sin(angle * 4) 
-
-hook.tx = target.x
-hook.ty = target.y
-hook.is_moving = true
+	local angle = atan2(target.x - hook.x,target.y - hook.y)
+	
+	hook.dx = cos(angle)
+	hook.dy = sin(angle)
+	
+	hook.x = player.x + hook.dx * hook.speed
+	hook.y = player.y + hook.dy * hook.speed
+	
+	hook.tx = target.x
+	hook.ty = target.y
+	hook.is_moving = true
 end
 
-function draw_hook(h)		
-	if draw_h then  
-			spr(43,h.x,h.y)
-			line(player.x+4,player.y+4, h.x, h.y,1)
+function draw_hook()		
+	if hook.visible then  
+			spr(hook.sprite,hook.x,hook.y)
+			line(player.x+4,player.y+4,
+			hook.x+4, hook.y+3,1)
 	end
 end
 
 
 function move_hook()
-	if draw_h and hook.is_moving then
+	if hook.visible and hook.is_moving then
 	
-		hook.x += hook.dx
-		hook.y += hook.dy
+		hook.x += hook.dx * hook.speed
+		hook.y += hook.dy * hook.speed
 		
-		if abs(hook.x - hook.tx) < 3 and abs(hook.y - hook.ty) < 3 then
-	 		hook.x = kook.tx
+		if abs(hook.x - hook.tx) < 3
+		and abs(hook.y - hook.ty) < 3
+		then
+	 		hook.x = hook.tx
 	 		hook.y = hook.ty
 	 		hook.is_moving = false
 		end
@@ -168,12 +202,12 @@ function move_hook()
 end
 
 function delete_hook()
-draw_h = false
-hook.x = 0 
-hook.y = 0 
-hook.dx = 0 
-hook.dy = 0
-hook.is_moving = false
+	hook.visible = false
+	hook.x = 0 
+	hook.y = 0 
+	hook.dx = 0 
+	hook.dy = 0
+	hook.is_moving = false
 end
 __gfx__
 00000000077666700676767000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -193,10 +227,10 @@ __gfx__
 00799600007dd6000000000000000000000000000000000077677666766077600000000000000000000000000000000000000000000000000000000000000000
 0090090000d00d000000000000000000000000000000000066666676555055500000000000000000000000000000000000000000000000000000000000000000
 00000000044666400000000000000000555555555555555500000000000000000000000000000000000000001100000000000000000000000000000000000000
-00000000646555600000000000000000500000055000000500000000000000000000000000000000000000000110000000000000000000000000000000000000
-0000000066655560000000000000000050dddd0550dddd0500000000000000000000000000000000000000000011000000000000000000000000000000000000
-0000000006446640000000000000000050d5530550355d0500000000000000000000000000000000000000000001100000000000000000000000000000000000
-00000000006fd600000000000000000050d6600550066d0500000000000000000000000000000000000000000000a00000000000000000000000000000000000
+000000006465556000000000000000005000000550000005000000000000000000000000000000000000000001100000000aaa00000000000000000000000000
+0000000066655560000000000000000050dddd0550dddd05000000000000000000000000000000000000000000110000000a0a00000000000000000000000000
+0000000006446640000000000000000050d5530550355d0500000000000000000000000000000000000000000001100000000a00000000000000000000000000
+00000000006fd600000000000000000050d6600550066d0500000000000000000000000000000000000000000000a000000aaa00000000000000000000000000
 00000000066ff4600000000000000000500000055000000500000000000000000000000000000000000000000000a0a000000000000000000000000000000000
 00000000004664000000000000000000500000055000000500000000000000000000000000000000000000000000aaa000000000000000000000000000000000
 00000000006006000000000000000000555555555555555500000000000000000000000000000000000000000000000000000000000000000000000000000000
