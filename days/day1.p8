@@ -94,6 +94,7 @@ function load_boss(x,y)
 		max_parts=4,
 		cur_parts=4,
 		level=1,
+		cooldown = 20,
 		draw=basic_draw,
 		a1 = basic_atack,
 	}
@@ -124,11 +125,6 @@ function boss_moveset()
 		b.a1(b.x, b.y,16)
 	end
 	
-	-- demo, delete this
-	if t() % 4 == 0 then
-		boss_hit()
-	end
-	
 	if b.dead then
 		b = bil
 	end
@@ -150,11 +146,12 @@ function player_init()
 	player ={
 		x=1,  y=1,
 		dx=0, dy=0,
-		speed = 4,
+		speed = 1,
 		sprite = 1,
 		dir = 1,
 		ass = false,
 		buffer = 0,
+		xrelease = true,
 	}
 	
 	hook ={
@@ -172,10 +169,24 @@ function player_init()
 end
 
 function player_buttons()
-	if player.buffer < 1 and btn(❎) then
-		throw_hook()
-		player.buffer = 20
+	local h = hook
+	local p = player
+	if btn(❎) and p.buffer < 1 then
+		-- thorw
+		if not h.visible and p.xrelease then
+			hook_throw()
+			p.buffer = 20
+		elseif not h.is_moving then
+			hook_boost()
+			p.buffer = 2
+		end
+		p.xrelease = false
 	end
+	
+	if not btn(❎) then
+		p.xrelease = true
+	end
+	
 	if btn(🅾️)	then 
 		delete_hook()
  end
@@ -221,10 +232,10 @@ function player_movement()
 	
 	if (btn(⬇️)) p.dy += 1
 	
-	-- player.dx =	mid(-1, player.dx, 1)
+	player.dx =	mid(-5, player.dx, 5)
 
-	player.dx *= 0.2
-	player.dy *= 0.2
+	player.dx *= 0.8
+	player.dy *= 0.8
 	
 	move_player()
 end
@@ -273,16 +284,37 @@ end
 
 -----------------------
 -- hook
-function throw_hook()
-	hook.visible = true
+function go_to_obj(o,o2,dx_in,dy_in,speed_in)
+	-- arguments:
+	-- object1. object2, obj1.dx, obj2.dy
+	local speed = speed_in or o.speed
+	local dx1 = dx_in or o.dx
+	local dy1 = dy_in or o.dy
+	
+	local nextx = o.x + dx1 * speed
+	local nexty = o.y + dy1 * speed
 
-	local angle = atan2(target.x - hook.x,target.y - hook.y)
+	local angle = atan2(o2.x-nextx, o2.y-nexty)
 	
-	hook.dx = cos(angle)
-	hook.dy = sin(angle)
+	local dirx = cos(angle)
+	local diry = sin(angle)
+	return {
+		dx=dirx,
+		dy=diry,
+		nx=nextx,
+		ny=nexty,
+	}
+end
+
+function hook_throw()
+	hook.visible = true
 	
-	hook.x = player.x + hook.dx * hook.speed
-	hook.y = player.y + hook.dy * hook.speed
+	local dir = go_to_obj(player,target,hook.dx,hook.dy,hook.speed)
+	hook.x = dir.nx
+	hook.y = dir.ny
+	hook.dx = dir.dx
+	hook.dy = dir.dy
+	
 	
 	hook.tx = target.x
 	hook.ty = target.y
@@ -298,14 +330,23 @@ function draw_hook()
 end
 
 
+function hook_boost()
+	local p = player
+	local h = hook
+	
+	local dir = go_to_obj(p, h)
+	p.dx += dir.dx * 2
+	p.dy += dir.dy * 2
+end
+
 function move_hook()
 	if hook.visible and hook.is_moving then
 	
 		hook.x += hook.dx * hook.speed
 		hook.y += hook.dy * hook.speed
 		
-		if abs(hook.x - hook.tx) < 3
-		and abs(hook.y - hook.ty) < 3
+		if abs(hook.x - hook.tx) < 4
+		and abs(hook.y - hook.ty) < 4
 		then
 	 		hook.x = hook.tx
 	 		hook.y = hook.ty
