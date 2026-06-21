@@ -1,0 +1,549 @@
+pico-8 cartridge // http://www.pico-8.com
+version 43
+__lua__
+function _init()
+	pi = 3.1415
+	bullets = {}
+	
+	player_init()
+	minigame = false
+	
+	b = nil
+	b = load_boss(63,63)
+	
+	target.x, target.y = get_next_boss_part()
+end
+
+function _update()
+	if (b) boss_moveset()
+	foreach(bullets, bullet_move)
+	
+	minigame_gameplay()
+	
+	if not minigame then 
+	 player_movement()
+ end
+	
+ move_hook()
+	player_buttons()
+end
+
+function _draw()
+	cls()
+	map(0,0,0,0,16,16)
+	if (b) b.draw()
+	
+	player_draw()
+	draw_ui()
+	
+	foreach(bullets, bullet_draw)
+end
+
+
+
+
+-->8
+--bullets
+function bullet_create(x,y,dx,dy)
+	add(bullets, {
+			x=x,   y=y,
+			dx=dx, dy=dy,
+			w=4, h=4,
+			sprite=17,
+		}
+	)
+end
+
+function bullet_move(b)
+	b.x += b.dx
+	b.y += b.dy
+	if b.x > 128 or b.x < 0 or
+		  b.y > 128 or b.y < 0
+	then
+		del(bullets, b)
+	end
+end
+
+function bullet_draw(b)
+	spr(b.sprite,b.x,b.y)
+end
+-->8
+-- bosses
+function boss_hit()
+	b.cur_parts -= 1
+	if b.cur_parts < 1 then
+		b.dead = true
+	end
+	-- animations
+end
+
+function get_next_boss_part()
+	local i = b.max_parts - b.cur_parts + 1
+	local x = b.x
+	local y = b.y-10+i*4
+	
+	return x,y
+end
+
+
+-- first boss
+function load_boss(x,y)
+	local boss = {
+		x=x, y=y,
+		h=16, w=16,
+		sprite=14,
+		max_parts=4,
+		cur_parts=4,
+		level=1,
+		cooldown = 20,
+		draw=basic_draw,
+		a1 = basic_atack,
+	}
+	return boss
+end
+
+-- atacks!!!
+
+function basic_atack(x,y,n)
+	local angle_deg, angle_rad=0
+	local bx, by, dx, dy=0
+	local radius = 8
+	
+	for i=0,n do
+		angle_deg = i / n * 360
+		angle_rad = angle_deg * pi/180
+		dx = cos(angle_rad)
+		dy = sin(angle_rad)
+		bx = x-2 + dx * radius
+		by = y-2 + dy * radius
+		
+		bullet_create(bx,by,dx,dy)
+	end
+end
+
+function boss_moveset()
+	if t() % 2 == 0 then
+		b.a1(b.x, b.y,16)
+	end
+	
+	if b.dead then
+		b = bil
+	end
+end
+
+function basic_draw()
+	spr(b.sprite, b.x-b.w/2, b.y-b.h/2, 2,2)
+	local start = b.max_parts - b.cur_parts + 1
+	for i=start,b.max_parts do
+		local x = b.x + 4
+		local y = b.y-10+i*4
+		line(b.x-4,y,x,y,3)
+	end
+end
+-->8
+-- player
+
+function player_init()
+	player ={
+		x=1,  y=1,
+		dx=0, dy=0,
+		speed = 1,
+		max_speed = 1,
+		sprite = 1,
+		dir = 1,
+		ass = false,
+		buffer = 0,
+		xrelease = true,
+	}
+	
+	hook ={
+		x=0,  y=0,
+		dx=0, dy=0,
+		tx=0, ty=0,
+		speed=3,
+		is_moving = false,
+		visible = false,
+		sprite = 44,
+		}
+	target ={
+		x=0, y=0,
+	}
+end
+
+function player_buttons()
+	local h = hook
+	local p = player
+	if btn(❎) and p.buffer < 1 then
+		-- thorw
+		if not h.visible and p.xrelease then
+			hook_throw()
+			p.buffer = 20
+		elseif not h.is_moving then
+			hook_boost()
+			p.buffer = 2
+		end
+		p.xrelease = false
+	end
+	
+	if not btn(❎) then
+		p.xrelease = true
+	end
+	
+	if btn(🅾️)	then 
+		if (not minigame) start_mini_game()
+ end
+end
+
+function player_draw()
+	if player.dir < 0 then
+		player.sprite = 1
+	else
+		player.sprite = 2
+	end
+	if player.ass then
+		player.sprite = 3
+	end
+	spr(player.sprite, player.x, player.y)
+	
+	draw_hook(hook)
+end
+
+function player_movement()
+	local p = player
+	
+	-- hook cooldown
+	if p.buffer > 0 then
+		p.buffer -= 1
+	end
+
+	if btn(⬅️) then
+		p.dx -= p.speed
+		p.dir = -1
+	end
+
+ if btn(➡️) then
+ 	p.dx += p.speed
+ 	p.dir = 1
+ end
+ 
+	if btn(⬆️) then 
+		p.dy -= p.speed
+	 p.ass = true
+	else 
+		p.ass = false  
+	end
+	
+	if (btn(⬇️)) p.dy += p.speed
+	
+	-- max speed
+	p.dx =	mid(-p.max_speed, p.dx, p.max_speed)
+	p.dy =	mid(-p.max_speed, p.dy, p.max_speed)
+
+	if not btn(➡️) and not btn(⬅️) then
+		p.dx *= 0.8
+	else
+		p.dx = flr(p.dx+0.5)
+	end
+	if not btn(⬆️) and not btn(⬇️) then
+		p.dy *= 0.8
+	else
+		p.dy = flr(p.dy+0.5)
+	end
+	
+	-- anti cobblestone
+--	p.dx = flr(p.dx+0.5)
+--	p.dy = flr(p.dy+0.5)
+
+	move_player()
+end
+
+-- movement
+function move_player()
+	local p = player
+	
+	local next_x = p.x + p.dx 
+	
+	if p.dx > 0 then 
+		if not is_tile_flag(next_x+7,p.y,0)
+		and not is_tile_flag(next_x+7,p.y+7,0)
+		then
+			p.x = next_x
+		end
+
+	elseif p.dx < 0 then 
+		if not is_tile_flag(next_x,p.y,0)
+		and not is_tile_flag(next_x,p.y+7,0)
+		then
+			p.x = next_x
+		end
+	end
+
+	local next_y = p.y + p.dy
+	
+	if p.dy > 0 then 
+		if not is_tile_flag(p.x,next_y+7,0)
+		and not is_tile_flag(p.x+7,next_y+7,0)
+		then
+			p.y = next_y
+		end
+	
+	elseif p.dy < 0 then 
+		if not is_tile_flag(p.x,next_y,0)
+		and not is_tile_flag(p.x+7,next_y,0)
+		then
+			p.y = next_y
+		end 
+	end
+	-- screen edges
+	p.x = mid(0, p.x, 120)
+ p.y = mid(0, p.y, 120)
+end
+
+-----------------------
+-- hook
+function go_to_obj(o,o2,dx_in,dy_in,speed_in)
+	-- arguments:
+	-- object1. object2, obj1.dx, obj2.dy
+	local speed = speed_in or o.speed
+	local dx1 = dx_in or o.dx
+	local dy1 = dy_in or o.dy
+	
+	local nextx = o.x + dx1 * speed
+	local nexty = o.y + dy1 * speed
+
+	local angle = atan2(o2.x-nextx, o2.y-nexty)
+	
+	local dirx = cos(angle)
+	local diry = sin(angle)
+	return {
+		dx=dirx,
+		dy=diry,
+		nx=nextx,
+		ny=nexty,
+	}
+end
+
+function hook_throw()
+	hook.visible = true
+	
+	local dir = go_to_obj(player,target,hook.dx,hook.dy,hook.speed)
+	hook.x = dir.nx
+	hook.y = dir.ny
+	hook.dx = dir.dx
+	hook.dy = dir.dy
+	
+	
+	hook.tx = target.x
+	hook.ty = target.y
+	hook.is_moving = true
+end
+
+function draw_hook()		
+	if hook.visible then  
+			spr(hook.sprite,hook.x,hook.y)
+			line(player.x+4,player.y+4,
+			hook.x+4, hook.y+3,1)
+	end
+end
+
+
+function hook_boost()
+	local p = player
+	local h = hook
+	
+	local dir = go_to_obj(p, h)
+	p.dx += dir.dx * 2
+	p.dy += dir.dy * 2
+end
+
+function move_hook()
+	if hook.visible and hook.is_moving then
+	
+		hook.x += hook.dx * hook.speed
+		hook.y += hook.dy * hook.speed
+		
+		if abs(hook.x - hook.tx) < 4
+		and abs(hook.y - hook.ty) < 4
+		then
+	 		hook.x = hook.tx
+	 		hook.y = hook.ty
+	 		hook.is_moving = false
+		end
+	end
+end
+
+function delete_hook()
+	hook.visible = false
+	hook.x = 0 
+	hook.y = 0 
+	hook.dx = 0 
+	hook.dy = 0
+	hook.is_moving = false
+end
+-->8
+-- colision
+
+-- basic box collision
+function collide(o1,o2)
+	if o1.x < o2.x + o2.w
+	or o2.x < o1.x + o1.w
+	or o1.y < o2.y + o2.h
+	or o2.y < o1.y + o1.h
+	then
+		return true
+	end
+	return false
+end
+
+function is_tile_flag(x,y,f)
+	local map_x = flr(x / 8)
+	local map_y = flr(y / 8)
+	
+	local tile = mget(map_x,map_y)
+	return fget(tile, f)
+end
+
+-- player colision 
+function check_player_colition(f)
+	local p = player
+	if is_tile_flag(p.x + 1, p.y + 1, f) or
+				is_tile_flag(p.x + 6, p.y + 1, f) or 
+				is_tile_flag(p.x + 1, p.y + 6, f) or 
+				is_tile_flag(p.x + 1, p.y + 1, f) 
+	then
+			return true -- player touched this flag
+	else 
+			return false	-- player doesn't touched the flag
+	end			
+end 
+-->8
+-- ui
+
+function draw_ui()
+	if hook.visible and not hook.is_moving
+	and minigame
+	then  
+		draw_arrows()
+	end
+end
+
+-- mini game 
+function start_mini_game()
+	minigame = true
+	current_arrow = 1
+	arrows = {}
+	for i = 1,4,1 do
+		local arrow_sprite = 22+flr(rnd(4))
+		add(arrows, {id = arrow_sprite, filled=false})
+	end
+end
+ 
+function stop_minigame()
+	minigame = false
+end
+
+
+function draw_arrows()
+	local next_sprite_x_pos = 40 
+	
+	for arr in all(arrows) do
+		next_sprite_x_pos += 8
+			if arr.filled then 
+				spr(arr.id+ 16,next_sprite_x_pos,104)
+			else
+				spr(arr.id,next_sprite_x_pos,104)
+			end
+	end
+end
+
+function minigame_gameplay()
+	if not minigame then return end
+	
+	local target_arrow = arrows[current_arrow]
+	-- player_input is the default arrow sprite id + 16 (filled)
+	
+	local player_input = 0
+	if btnp(⬆️) then player_input = 22 end
+	if btnp(⬇️) then player_input = 23 end
+	if btnp(⬅️) then player_input = 24 end
+	if btnp(➡️) then player_input = 25 end
+
+	if player_input > 0 then 
+			if player_input == target_arrow.id then
+						target_arrow.filled = true
+						current_arrow += 1
+						
+						if current_arrow > 4 then
+								stop_minigame()
+								delete_hook()
+						end
+			else 
+				stop_minigame()
+			end
+	end
+end
+__gfx__
+0000000007dddd6006dddd700dddddd006dddd700000000000000000000000000000000000000000000000000000000000000000000000000666666666666660
+000000000d55567dd76555d00dddddd0d76555d00000000000000000000000000000000000000000000000000000000000000000000000000666666666666660
+0070070006555dddddd555600dddddd0ddd555600000000000000000000000000000000000000000000000000000000000000000000000000666555555556660
+0007700007ddd7d00d7ddd700dddddd00d7ddd700000000000000000000000000000000000000000000000000000000000000000000000000666666666666660
+0007700000d94d0000d49d0000dddd0000d49d000000000000000000000000000000000000000000000000000000000000000000000000000666666666666660
+007007000d7446d00d6447d00d6611d00d6447d00000000000000000000000000000000000000000000000000000000000000000000000000666666555556660
+00000000006dd700007dd60000616100007dd6000000000000000000000000000000000000000000000000000000000000000000000000000666555556666660
+0000000000d00d0000d00d0000d00d0000d00d000000000000000000000000000000000000000000000000000000000000000000000000000666666666666660
+00000000000000000000000000000000000000000000000000aaaa0000aaaa0000aaaa0000aaaa00000000000000000000000000000000000666666666666660
+0000000000000000000000000000000000000000000000000aa55aa00aa55aa00aa5aaa00aaa5aa0000000000000000000000000000000000666555555556660
+000000000009900000000000000000000000000000000000aa5555aaaaa55aaaaa55aaaaaaaa55aa000000000000000000000000000000000666566666666660
+00000000009aa90000000000000000000000000000000000a555555aaaa55aaaa555555aa555555a000000000000000000000000000000000666666666666660
+00000000009aa90000000000000000000000000000000000aaa55aaaa555555aa555555aa555555a000000000000000000000000000000000666666666666660
+000000000009900000000000000000000000000000000000aaa55aaaaa5555aaaa55aaaaaaaa55aa000000000000000000000000000000000666555555556660
+0000000000000000000000000000000000000000000000000aa55aa00aa55aa00aa5aaa00aaa5aa0000000000000000000000000000000000666665555666660
+00000000000000000000000000000000000000000000000000aaaa0000aaaa0000aaaa0000aaaa00000000000000000000000000000000000666666666666660
+00000000000000000000000000000000cccccccc0000000000aaaa0000aaaa0000aaaa0000aaaa00000000000000000000000000000000000000000000000000
+00000000000000000000000000000000cccccccc000000000aabbaa00aabbaa00aabaaa00aaabaa0000000000000000000000000000000000000000000000000
+00000000000000000000000000000000cccccccc00000000aabbbbaaaaabbaaaaabbaaaaaaaabbaa000000000000000000000000000000000000000000000000
+00000000000000000000000000000000cccccccc00000000abbbbbbaaaabbaaaabbbbbbaabbbbbba00000000000000000000aaaa000000000000000000000000
+00000000000000000000000000000000cccccccc00000000aaabbaaaabbbbbbaabbbbbbaabbbbbba00000000000000000000000a000000000000000000000000
+00000000000000000000000000000000cccccccc00000000aaabbaaaaabbbbaaaabbaaaaaaaabbaa0000000000000000000000aa000000000000000000000000
+00000000000000000000000000000000cccccccc000000000aabbaa00aabbaa00aabaaa00aaabaa0000000000000000000000000000000000000000000000000
+00000000000000000000000000000000cccccccc0000000000aaaa0000aaaa0000aaaa0000aaaa00000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000009900000000009900099900000000990009990000000000099000000000000009900000000000990000990000000099000099000000000009900000000
+0000009aa9000000009aa9909aa90000009aa9909aa90000000009aa90099000000009aa90099000009aa9009aa90000009aa9009aa90000000009aa90099000
+0099009aa9009900009aaaa9aaa90000009aaaa9aaa900000090009aa99aa9000090009aa99aa900009aaa99aaa90000009aaa99aaa900000090009aa99aa900
+09aa99aaaa99aa900009aaaaaaa909900009aaaaaaa9099009a999aaaaaaa90009a999aaaaaaa9000009aaaaaaa900990009aaaaaaa9009909a999aaaaaaa900
+09aaaaaaaaaaaa90099aaaaaaaa99aa9099aaaaaaaa99aa909aaaaaaaaaa900009aaaaaaaaaa9000099aaaaaaaaa99a9099aaaaaaaaa99a909aaaaaaaaaa9000
+009aaaaaaaaaa9009aaaaaaaaaaaaaa99aaaaaaaaaaaaaa909aaaaaaaaaa909909aaaaaaaaaa90999aaaaaaaaaaaaaa99aaaaaaaaaaaaaa909aaaaaaaaaa9099
+099aaaa99aaaa9909aaaaaa99aaaaa909aaaaaa99aaaaa9009aaaaa99aaaa9aa09aaaaa99aaaa9aa9aaaaaa99aaaaa909aaaaaa99aaaaa9009aaaaa99aaaa9aa
+9aaaaa9aa9aaaaa99aaaaa9aa9aaaa909aaaaa9aa9aaaa909aaaaa9aa9aaaaa99aaaaa9aa9aaaaa99aaaaa9aa9aaaa909aaaaa9aa9aaaa909aaaaa9aa9aaaaa9
+9aaaaa9aa9aaaaa909aaaa9aa9aaaaa909aaaa9aa9aaaaa99aaaaa9aa9aaaa909aaaaa9aa9aaaa9009aaaa9aa9aaaaa909aaaa9aa9aaaaa99aaaaa9aa9aaaa90
+099aaaa99aaaa99009aaaaa99aaaaaa909aaaaa99aaaaaa99aaaaaa99aaaaa909aaaaaa99aaaaa9009aaaaa99aaaaaa909aaaaa99aaaaaa99aaaaaa99aaaaa90
+009aaaaaaaaaa9009aaaaaaaaaaaaaa99aaaaaaaaaaaaaa9099aaaaaaaaaaa90099aaaaaaaaaaa909aaaaaaaaaaaaaa99aaaaaaaaaaaaaa9099aaaaaaaaaaa90
+09aaaaaaaaaaaa909a99aaaaaaaaa9909a99aaaaaaaaa9900009aaaaaaaaaaa90009aaaaaaaaaaa99aa99aaaaaaaa9909aa99aaaaaaaa9900009aaaaaaaaaaa9
+09aa99aaaa99aa9099009aaaaaaa900099009aaaaaaa9000009aaaaaaa999aa9009aaaaaaa999aa909909aaaaaaa900009909aaaaaaa9000009aaaaaaa999aa9
+0099009aa900990000009aaa99aaa90000009aaa99aaa900009aa999aa900990009aa999aa90099000009aaa9aaaa90000009aaa9aaaa900009aa999aa900990
+0000009aa900000000009aa9009aa90000009aa9009aa900000999009a900000000999009a90000000009aa9099aa90000009aa9099aa900000999009a900000
+00000009900000000000099000099000000009900009900000000000999000000000000099900000000009990009900000000999000990000000000099900000
+00000099000000000000000990000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000009aa900990000000009aa9000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0090009aa99aa9000099009aa9009900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+09a999aaaaaaa90009aa99aaaa99aa90000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+09aaaaaaaaaa900009aaaaaaaaaaaa90000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+09aaaaaaaaaa9099009aaaaaaaaaa900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+09aaaaa99aaaa9aa099aaaa99aaaa990000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+9aaaaa9aa9aaaaa99aaaaa9aa9aaaaa9000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+9aaaaa9aa9aaaa909aaaaa9aa9aaaaa9000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+9aaaaaa99aaaaa90099aaaa99aaaa990000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+099aaaaaaaaaaa90009aaaaaaaaaa900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0009aaaaaaaaaaa909aaaaaaaaaaaa90000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+009aaaaaaa999aa909aa99aaaa99aa90000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+009aa999aa9009900099009aa9009900000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000999009a9000000000009aa9000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000999000000000000990000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
