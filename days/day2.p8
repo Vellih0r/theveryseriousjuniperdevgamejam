@@ -3,40 +3,51 @@ version 43
 __lua__
 function _init()
 	pi = 3.1415
-	bullets = {}
 	
 	player_init()
 	minigame = false
 	
-	b = nil
-	b = load_boss(63,63)
+	boss = nil
+	boss = load_boss(63,63)
 	
 	target.x, target.y = get_next_boss_part()
 end
 
 function _update()
-	if (b) boss_moveset()
+	-- boss
+	if (boss) boss_moveset()
+	-- bullets
 	foreach(bullets, bullet_move)
 	
-	minigame_gameplay()
-	
-	if not minigame then 
-	 player_movement()
+	-- move player or minigame
+	if minigame then
+		minigame_gameplay()
+	else
+		-- player
+		player_movement()
+	 move_hook()
+		player_buttons()
  end
 	
- move_hook()
-	player_buttons()
 end
 
 function _draw()
 	cls()
+	print(boss.cooldown)
+	print(player.iframes)
 	map(0,0,0,0,16,16)
-	if (b) b.draw()
+	-- boss
+	if (boss) boss.draw()
 	
+	-- player
 	player_draw()
+	
+	-- bullets
+	foreach(bullets, bullet_draw)
+	
+	-- ui
 	draw_ui()
 	
-	foreach(bullets, bullet_draw)
 end
 
 
@@ -57,11 +68,22 @@ end
 function bullet_move(b)
 	b.x += b.dx
 	b.y += b.dy
+	
+	-- collide player
+	local hit = collide(player, b)
+	if hit and not player.hit then
+		player_hurt()
+	end
+	player.hit = hit
+	
+	-- screen edges
 	if b.x > 128 or b.x < 0 or
 		  b.y > 128 or b.y < 0
 	then
-		del(bullets, b)
+		b.dead = true
 	end
+	
+	if (b.dead) del(bullets, b)
 end
 
 function bullet_draw(b)
@@ -70,6 +92,7 @@ end
 -->8
 -- bosses
 function boss_hit()
+	local b = boss
 	b.cur_parts -= 1
 	if b.cur_parts < 1 then
 		b.dead = true
@@ -78,6 +101,7 @@ function boss_hit()
 end
 
 function get_next_boss_part()
+	local b = boss
 	local i = b.max_parts - b.cur_parts + 1
 	local x = b.x
 	local y = b.y-10+i*4
@@ -95,9 +119,9 @@ function load_boss(x,y)
 		max_parts=4,
 		cur_parts=4,
 		level=1,
-		cooldown = 20,
+		cooldown = 30,
 		draw=basic_draw,
-		a1 = basic_atack,
+		atk1 = basic_atack,
 	}
 	return boss
 end
@@ -109,11 +133,12 @@ function basic_atack(x,y,n)
 	local bx, by, dx, dy=0
 	local radius = 8
 	
-	for i=0,n do
+	for i=1,n do
 		angle_deg = i / n * 360
 		angle_rad = angle_deg * pi/180
 		dx = cos(angle_rad)
 		dy = sin(angle_rad)
+		-- position
 		bx = x-2 + dx * radius
 		by = y-2 + dy * radius
 		
@@ -122,16 +147,24 @@ function basic_atack(x,y,n)
 end
 
 function boss_moveset()
-	if t() % 2 == 0 then
-		b.a1(b.x, b.y,16)
+	local b = boss
+	if b.cooldown > 0 then
+		b.cooldown -= 1
+	end
+	
+	if b.cooldown < 1 then
+		-- atacks
+		b.atk1(b.x, b.y,16)
+		b.cooldown = 30*2
 	end
 	
 	if b.dead then
-		b = bil
+		b = nil
 	end
 end
 
 function basic_draw()
+	local b = boss
 	spr(b.sprite, b.x-b.w/2, b.y-b.h/2, 2,2)
 	local start = b.max_parts - b.cur_parts + 1
 	for i=start,b.max_parts do
@@ -147,13 +180,22 @@ function player_init()
 	player ={
 		x=1,  y=1,
 		dx=0, dy=0,
+		w=6, h=6,
 		speed = 1,
 		max_speed = 1,
+		max_hp = 3,
+		cur_hp = 3,
+		hit = false,
+		
+		
 		sprite = 1,
 		dir = 1,
 		ass = false,
+		
 		buffer = 0,
 		xrelease = true,
+		iframes = 0,
+		max_iframes = flr(30 * 0.8),
 	}
 	
 	hook ={
@@ -168,6 +210,7 @@ function player_init()
 	target ={
 		x=0, y=0,
 	}
+	bullets = {}
 end
 
 function player_buttons()
@@ -178,9 +221,12 @@ function player_buttons()
 		if not h.visible and p.xrelease then
 			hook_throw()
 			p.buffer = 20
-		elseif not h.is_moving then
-			hook_boost()
-			p.buffer = 2
+			
+		-- minigame condition
+		elseif not h.is_moving 
+			  and not minigame then
+				start_mini_game()
+				minigame = true
 		end
 		p.xrelease = false
 	end
@@ -189,23 +235,54 @@ function player_buttons()
 		p.xrelease = true
 	end
 	
-	if btn(🅾️)	then 
-		if (not minigame) start_mini_game()
- end
+--	if btn(🅾️)	then 
+--		if (not minigame) start_mini_game()
+-- end
 end
 
 function player_draw()
-	if player.dir < 0 then
-		player.sprite = 1
+	local p = player
+	if p.dir < 0 then
+		p.sprite = 1
 	else
-		player.sprite = 2
+		p.sprite = 2
 	end
-	if player.ass then
-		player.sprite = 3
+	if p.ass then
+		p.sprite = 3
 	end
-	spr(player.sprite, player.x, player.y)
+	
+	-- blinking on iframes
+	if p.iframes == 0
+		or p.iframes % 6 == 0 then
+		spr(p.sprite,p.x,p.y)
+	end
 	
 	draw_hook(hook)
+end
+
+function player_hurt()
+	local p = player
+	if p.iframes < 1 then
+		p.cur_hp -= 1
+		p.iframes = p.max_iframes
+		-- animation
+		-- sfx
+		
+		-- death
+		if p.cur_hp < 1 then
+			cls()
+			pal(13,8)
+			spr(p.sprite,p.x,p.y)
+			stop()
+		end
+	end
+end
+
+function dash_player()
+	local p = player
+	p.dx *= 3
+	p.dy *= 3
+	p.iframes = 10
 end
 
 function player_movement()
@@ -214,6 +291,10 @@ function player_movement()
 	-- hook cooldown
 	if p.buffer > 0 then
 		p.buffer -= 1
+	end
+	-- iframes
+	if p.iframes > 0 then
+		p.iframes -= 1
 	end
 
 	if btn(⬅️) then
@@ -386,9 +467,9 @@ end
 -- basic box collision
 function collide(o1,o2)
 	if o1.x < o2.x + o2.w
-	or o2.x < o1.x + o1.w
-	or o1.y < o2.y + o2.h
-	or o2.y < o1.y + o1.h
+	and o2.x < o1.x + o1.w
+	and o1.y < o2.y + o2.h
+	and o2.y < o1.y + o1.h
 	then
 		return true
 	end
@@ -420,6 +501,8 @@ end
 -- ui
 
 function draw_ui()
+	display_hp()
+
 	if hook.visible and not hook.is_moving
 	and minigame
 	then  
@@ -427,9 +510,26 @@ function draw_ui()
 	end
 end
 
+-- hp
+function display_hp()
+	local curhp = player.cur_hp
+	local maxhp = player.max_hp
+	local x = 0
+	local y = 0
+	-- current hp
+	for i=1,curhp do
+		x += 8
+		spr(42,x,y)
+	end
+	-- empty hp
+	for i=1,maxhp-curhp do
+		x += 8
+		spr(26,x,y)
+	end
+end
+
 -- mini game 
 function start_mini_game()
-	minigame = true
 	current_arrow = 1
 	arrows = {}
 	for i = 1,4,1 do
@@ -491,22 +591,22 @@ __gfx__
 007007000d7446d00d6447d00d6611d00d6447d00000000000000000000000000000000000000000000000000000000000000000000000000666666555556660
 00000000006dd700007dd60000616100007dd6000000000000000000000000000000000000000000000000000000000000000000000000000666555556666660
 0000000000d00d0000d00d0000d00d0000d00d000000000000000000000000000000000000000000000000000000000000000000000000000666666666666660
-00000000000000000000000000000000000000000000000000aaaa0000aaaa0000aaaa0000aaaa00000000000000000000000000000000000666666666666660
-0000000000000000000000000000000000000000000000000aa55aa00aa55aa00aa5aaa00aaa5aa0000000000000000000000000000000000666555555556660
-000000000009900000000000000000000000000000000000aa5555aaaaa55aaaaa55aaaaaaaa55aa000000000000000000000000000000000666566666666660
-00000000009aa90000000000000000000000000000000000a555555aaaa55aaaa555555aa555555a000000000000000000000000000000000666666666666660
-00000000009aa90000000000000000000000000000000000aaa55aaaa555555aa555555aa555555a000000000000000000000000000000000666666666666660
-000000000009900000000000000000000000000000000000aaa55aaaaa5555aaaa55aaaaaaaa55aa000000000000000000000000000000000666555555556660
-0000000000000000000000000000000000000000000000000aa55aa00aa55aa00aa5aaa00aaa5aa0000000000000000000000000000000000666665555666660
-00000000000000000000000000000000000000000000000000aaaa0000aaaa0000aaaa0000aaaa00000000000000000000000000000000000666666666666660
-00000000000000000000000000000000cccccccc0000000000aaaa0000aaaa0000aaaa0000aaaa00000000000000000000000000000000000000000000000000
-00000000000000000000000000000000cccccccc000000000aabbaa00aabbaa00aabaaa00aaabaa0000000000000000000000000000000000000000000000000
-00000000000000000000000000000000cccccccc00000000aabbbbaaaaabbaaaaabbaaaaaaaabbaa000000000000000000000000000000000000000000000000
-00000000000000000000000000000000cccccccc00000000abbbbbbaaaabbaaaabbbbbbaabbbbbba00000000000000000000aaaa000000000000000000000000
-00000000000000000000000000000000cccccccc00000000aaabbaaaabbbbbbaabbbbbbaabbbbbba00000000000000000000000a000000000000000000000000
-00000000000000000000000000000000cccccccc00000000aaabbaaaaabbbbaaaabbaaaaaaaabbaa0000000000000000000000aa000000000000000000000000
-00000000000000000000000000000000cccccccc000000000aabbaa00aabbaa00aabaaa00aaabaa0000000000000000000000000000000000000000000000000
-00000000000000000000000000000000cccccccc0000000000aaaa0000aaaa0000aaaa0000aaaa00000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000aaaa0000aaaa0000aaaa0000aaaa00000055000000000000000000000000000666666666666660
+0000000000000000000000000000000000000000000000000aa55aa00aa55aa00aa5aaa00aaa5aa0000555500000000000000000000000000666555555556660
+000000000009900000000000000000000000000000000000aa5555aaaaa55aaaaa55aaaaaaaa55aa005556500000000000000000000000000666566666666660
+00000000009aa90000000000000000000000000000000000a555555aaaa55aaaa555555aa555555a055556500000000000000000000000000666666666666660
+00000000009aa90000000000000000000000000000000000aaa55aaaa555555aa555555aa555555a056556500000000000000000000000000666666666666660
+000000000009900000000000000000000000000000000000aaa55aaaaa5555aaaa55aaaaaaaa55aa056556500000000000000000000000000666555555556660
+0000000000000000000000000000000000000000000000000aa55aa00aa55aa00aa5aaa00aaa5aa0055665500000000000000000000000000666665555666660
+00000000000000000000000000000000000000000000000000aaaa0000aaaa0000aaaa0000aaaa00005555000000000000000000000000000666666666666660
+00000000000000000000000000000000cccccccc0000000000aaaa0000aaaa0000aaaa0000aaaa00000055000000000000000000000000000000000000000000
+00000000000000000000000000000000cccccccc000000000aabbaa00aabbaa00aabaaa00aaabaa0000555500000000000000000000000000000000000000000
+00000000000000000000000000000000cccccccc00000000aabbbbaaaaabbaaaaabbaaaaaaaabbaa00555a500000000000000000000000000000000000000000
+00000000000000000000000000000000cccccccc00000000abbbbbbaaaabbaaaabbbbbbaabbbbbba05555a50000000000000aaaa000000000000000000000000
+00000000000000000000000000000000cccccccc00000000aaabbaaaabbbbbbaabbbbbbaabbbbbba05a55a50000000000000000a000000000000000000000000
+00000000000000000000000000000000cccccccc00000000aaabbaaaaabbbbaaaabbaaaaaaaabbaa05a55a5000000000000000aa000000000000000000000000
+00000000000000000000000000000000cccccccc000000000aabbaa00aabbaa00aabaaa00aaabaa0055aa5500000000000000000000000000000000000000000
+00000000000000000000000000000000cccccccc0000000000aaaa0000aaaa0000aaaa0000aaaa00005555000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
