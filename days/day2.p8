@@ -6,14 +6,23 @@ function _init()
 	
 	player_init()
 	minigame = false
+	minigame_buffer = 0
 	
 	boss = nil
 	boss = load_boss(63,63)
-	
-	target.x, target.y = get_next_boss_part()
+
 end
 
 function _update()
+
+	-- get target for hook
+	if boss then
+		target.x, target.y = get_next_boss_part()
+	else
+		target.x = player.x + player.dx*20
+		target.y = player.y + player.dy*20
+	end
+	
 	-- boss
 	if (boss) boss_moveset()
 	-- bullets
@@ -22,20 +31,21 @@ function _update()
 	-- move player or minigame
 	if minigame then
 		minigame_gameplay()
-	else
+	elseif minigame_buffer < 1 then
 		-- player
 		player_movement()
 	 move_hook()
 		player_buttons()
+	else
+		-- buffer to wait after minigame
+		minigame_buffer  -= 1
  end
 	
 end
 
 function _draw()
 	cls()
-	print(boss.cooldown)
-	print(player.iframes)
-	map(0,0,0,0,16,16)
+	--	map(0,0,0,0,16,16)
 	-- boss
 	if (boss) boss.draw()
 	
@@ -47,7 +57,6 @@ function _draw()
 	
 	-- ui
 	draw_ui()
-	
 end
 
 
@@ -70,7 +79,12 @@ function bullet_move(b)
 	b.y += b.dy
 	
 	-- collide player
+		-- shift hitbox to center
+		player.x += 2
+		player.y += 2
 	local hit = collide(player, b)
+		player.x -= 2
+		player.y -= 2
 	if hit and not player.hit then
 		player_hurt()
 	end
@@ -92,12 +106,7 @@ end
 -->8
 -- bosses
 function boss_hit()
-	local b = boss
-	b.cur_parts -= 1
-	if b.cur_parts < 1 then
-		b.dead = true
-	end
-	-- animations
+	boss.cur_parts -= 1
 end
 
 function get_next_boss_part()
@@ -117,45 +126,50 @@ function load_boss(x,y)
 		h=16, w=16,
 		sprite=14,
 		max_parts=4,
-		cur_parts=4,
+		cur_parts=1,
 		level=1,
 		cooldown = 30,
 		draw=basic_draw,
-		atk1 = basic_atack,
+		atk1 = circle_attack,
+		atk2 = arc_attack
 	}
 	return boss
 end
 
--- atacks!!!
-
-function basic_atack(x,y,n)
-	local angle_deg, angle_rad=0
-	local bx, by, dx, dy=0
-	local radius = 8
-	
-	for i=1,n do
-		angle_deg = i / n * 360
-		angle_rad = angle_deg * pi/180
-		dx = cos(angle_rad)
-		dy = sin(angle_rad)
-		-- position
-		bx = x-2 + dx * radius
-		by = y-2 + dy * radius
-		
-		bullet_create(bx,by,dx,dy)
-	end
-end
-
+-- ai of boss
 function boss_moveset()
+	if (boss.dead) boss = nil
+	
 	local b = boss
+	if (b == nil) return
+	
+	-- death condition
+	if b.cur_parts < 1 then
+		b.dead = true
+		-- animation
+	end
+	
+	-- cooldown math
 	if b.cooldown > 0 then
 		b.cooldown -= 1
 	end
 	
 	if b.cooldown < 1 then
 		-- atacks
-		b.atk1(b.x, b.y,16)
-		b.cooldown = 30*2
+		
+		-- choose attack
+		local r = rnd()
+		
+		if r < 0.3 then
+			b.atk1(b.x, b.y,16)
+			b.cooldown = 30*1
+		elseif r < 0.6 then
+			b.atk2(b.x,b.y,4)
+			b.cooldown = 30*1
+		else
+			b.atk2(b.x,b.y,8)
+			b.cooldown = 30*2
+		end
 	end
 	
 	if b.dead then
@@ -173,6 +187,59 @@ function basic_draw()
 		line(b.x-4,y,x,y,3)
 	end
 end
+
+-- atacks!!!
+function circle_attack(x,y,n)
+		local angle_deg = 0
+	local angle_rad = 0
+	local bx, by = 0
+	local dx, dy=0
+	local radius = 8
+	
+	local angle = 360
+	
+	for i=1,n do
+		angle_deg = i / n * angle
+		angle_rad = angle_deg * pi/180
+		dx = cos(angle_rad) 
+		dy = sin(angle_rad)
+		-- position
+		bx = x-2 + dx * radius
+		by = y-2 + dy * radius
+		
+		bullet_create(bx,by,dx,dy)
+	end
+end
+
+function arc_attack(x,y,n)
+	local bx, by = 0
+	local dx, dy=0
+	local radius = 8
+	
+	local spread = 10 * pi/180
+	local base_angle = atan2(player.x-boss.x,
+				          player.y-boss.y)
+	
+	for i=1,n do
+		local offset
+		
+		if n == 1 then
+			offset = 0
+		else
+			offset = -spread/2 + (i-1)*spread/(n-1)
+		end
+		
+		local angle = base_angle + offset
+		
+		dx = cos(angle) 
+		dy = sin(angle)
+		-- position
+		bx = x-2 + dx * radius
+		by = y-2 + dy * radius
+		
+		bullet_create(bx,by,dx,dy)
+	end
+end
 -->8
 -- player
 
@@ -180,7 +247,9 @@ function player_init()
 	player ={
 		x=1,  y=1,
 		dx=0, dy=0,
-		w=6, h=6,
+		last_dx = 0,
+		last_dy = 0,
+		w=4, h=4,
 		speed = 1,
 		max_speed = 1,
 		max_hp = 3,
@@ -191,8 +260,10 @@ function player_init()
 		sprite = 1,
 		dir = 1,
 		ass = false,
+		blink = 0,
 		
 		buffer = 0,
+		dash_cd = 0,
 		xrelease = true,
 		iframes = 0,
 		max_iframes = flr(30 * 0.8),
@@ -225,6 +296,13 @@ function player_buttons()
 		-- minigame condition
 		elseif not h.is_moving 
 			  and not minigame then
+			 -- if boss is dead
+			 -- there r no sence
+			 if not boss then
+				 delete_hook()
+				 p.buffer = 10
+				 return
+			 end
 				start_mini_game()
 				minigame = true
 		end
@@ -235,25 +313,32 @@ function player_buttons()
 		p.xrelease = true
 	end
 	
---	if btn(🅾️)	then 
---		if (not minigame) start_mini_game()
--- end
+	if btn(🅾️)	then 
+		dash()
+ end
 end
 
 function player_draw()
 	local p = player
+	
+	-- choose sprite
 	if p.dir < 0 then
 		p.sprite = 1
 	else
 		p.sprite = 2
 	end
+	
 	if p.ass then
 		p.sprite = 3
 	end
 	
+	
 	-- blinking on iframes
-	if p.iframes == 0
-		or p.iframes % 6 == 0 then
+	if p.blink != 0 then
+		p.blink -= 1
+	end
+	if p.blink == 0 or
+		p.blink % 6 == 0 then
 		spr(p.sprite,p.x,p.y)
 	end
 	
@@ -262,9 +347,12 @@ end
 
 function player_hurt()
 	local p = player
+	
 	if p.iframes < 1 then
 		p.cur_hp -= 1
+		delete_hook()
 		p.iframes = p.max_iframes
+		p.blink = p.max_iframes
 		-- animation
 		-- sfx
 		
@@ -278,23 +366,33 @@ function player_hurt()
 	end
 end
 
-function dash_player()
+function dash()
 	local p = player
-	p.dx *= 3
-	p.dy *= 3
-	p.iframes = 10
+	
+	if p.dash_cd < 1 then
+		pal(13,7)
+		p.x += p.last_dx*5
+		p.y += p.last_dy*5
+		p.dash_cd = 30
+		p.iframes = 6
+	end
 end
 
 function player_movement()
 	local p = player
 	
-	-- hook cooldown
+	-- cooldowns
 	if p.buffer > 0 then
 		p.buffer -= 1
+	end
+	if p.dash_cd > 0 then
+		p.dash_cd -= 1
 	end
 	-- iframes
 	if p.iframes > 0 then
 		p.iframes -= 1
+	else
+		pal()
 	end
 
 	if btn(⬅️) then
@@ -309,7 +407,7 @@ function player_movement()
  
 	if btn(⬆️) then 
 		p.dy -= p.speed
-	 p.ass = true
+		p.ass = true
 	else 
 		p.ass = false  
 	end
@@ -331,10 +429,16 @@ function player_movement()
 		p.dy = flr(p.dy+0.5)
 	end
 	
-	-- anti cobblestone
---	p.dx = flr(p.dx+0.5)
---	p.dy = flr(p.dy+0.5)
-
+	-- save as last used
+	if p.dx > 0.5 or
+		  p.dx < 0.5 then
+		p.last_dx = p.dx
+	end
+	if p.dy > 0.5 or
+		  p.dy < 0.5 then
+		p.last_dy = p.dy
+	end
+	
 	move_player()
 end
 
@@ -420,10 +524,16 @@ function hook_throw()
 end
 
 function draw_hook()		
-	if hook.visible then  
-			spr(hook.sprite,hook.x,hook.y)
+	if hook.visible then
+			if hook.x < player.x then
+				spr(hook.sprite,hook.x-4,
+				 hook.y-4, 1,1,0)
+			else
+				spr(hook.sprite,hook.x-4,
+				 hook.y-4)
+			end
 			line(player.x+4,player.y+4,
-			hook.x+4, hook.y+3,1)
+			hook.x-1, hook.y-1,1)
 	end
 end
 
@@ -540,6 +650,7 @@ end
  
 function stop_minigame()
 	minigame = false
+	minigame_buffer = 5
 end
 
 
@@ -557,25 +668,29 @@ function draw_arrows()
 end
 
 function minigame_gameplay()
-	if not minigame then return end
+	if (not minigame) return
 	
 	local target_arrow = arrows[current_arrow]
 	-- player_input is the default arrow sprite id + 16 (filled)
 	
 	local player_input = 0
-	if btnp(⬆️) then player_input = 22 end
-	if btnp(⬇️) then player_input = 23 end
-	if btnp(⬅️) then player_input = 24 end
-	if btnp(➡️) then player_input = 25 end
+	if (btnp(⬆️)) player_input = 22
+	if (btnp(⬇️)) player_input = 23
+	if (btnp(⬅️)) player_input = 24
+	if (btnp(➡️)) player_input = 25
 
 	if player_input > 0 then 
 			if player_input == target_arrow.id then
 						target_arrow.filled = true
 						current_arrow += 1
 						
+						
+						-- wincondition!!!
 						if current_arrow > 4 then
-								stop_minigame()
+								stop_minigame()					
 								delete_hook()
+								-- damage boss!!!
+								if (boss) boss_hit()
 						end
 			else 
 				stop_minigame()
