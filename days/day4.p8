@@ -7,9 +7,10 @@ function _init()
 	player_init()
 	minigame = false
 	minigame_buffer = 0
+	gamestate = "game"
 	
 	boss = nil
---	boss = load_boss(63,63)
+	boss = load_boss(63,63)
 
 	coil_num = 132
 	gear_angle = 0
@@ -44,6 +45,14 @@ function _update()
 		-- buffer to wait after minigame
 		minigame_buffer  -= 1
  end
+ 
+ if gamestate == "gameover" then 
+		if btnp(❎) then 
+			player_init()
+			player.buffer = 10
+			gamestate = "game" 
+		end
+	end
 	
 end
 
@@ -51,26 +60,33 @@ function _draw()
 	cls()
 --	pal(13,10)
 --	pal(5,3)
-	map()
-	-- boss
-	if (boss) boss.draw()
-	
-	-- player
-	player_draw()
-	
-	-- bullets
-	foreach(bullets, bullet_draw)
-	
-	-- ui
-	draw_ui()
-	
-	-- rotate gear
-	if player.locx == 0 then
-		local sa = gear_angle/360
---		rspr(196*8,0,300,300,sa,64,64,32,32)
-			rspr(12*8,0,32,32,sa,64,64,46,46)
-		gear_angle -= gear_speed
-	end
+	if gamestate == "game" then
+		map()
+		-- boss
+		if (boss) boss.draw()
+		
+		-- player
+		player_draw()
+		
+		-- bullets
+		foreach(bullets, bullet_draw)
+		
+		-- ui
+		draw_ui()
+		
+		-- rotate gear
+		if player.locx == 0 then
+			local sa = gear_angle/360
+	--		rspr(196*8,0,300,300,sa,64,64,32,32)
+				rspr(12*8,0,32,32,sa,64,64,46,46)
+			gear_angle -= gear_speed
+		end
+		
+		elseif gamestate == "gameover" then
+				print("you died bitch", 38, 54, 8)
+    print("the city will never be awaken", 8, 64, 9)
+    print("press ❎ to restart", 28, 74, 7)
+		end
 end
 
 
@@ -422,10 +438,11 @@ function player_hurt()
 		
 		-- death
 		if p.cur_hp < 1 then
-			cls()
-			pal(13,8)
-			spr(p.sprite,p.x,p.y)
-			stop()
+--			cls()
+--			pal(13,8)
+--			spr(p.sprite,p.x,p.y)
+--			stop()
+			gamestate ="gameover"
 		end
 	end
 end
