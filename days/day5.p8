@@ -31,7 +31,9 @@ function _update()
 	if (boss) boss_moveset()
 	-- bullets
 	foreach(bullets, bullet_move)
+	foreach(spirals, spiral_move)
 	
+
 	-- move player or minigame
 	if minigame then
 		minigame_gameplay()
@@ -70,17 +72,17 @@ function _draw()
 		
 		-- bullets
 		foreach(bullets, bullet_draw)
-		
+		foreach(aim_lasers, draw_aim_laser)
+		foreach(spirals, bullet_draw)
 		-- ui
 		draw_ui()
 		
 		-- rotate gear
-		if player.locx == 0 then
-			local sa = gear_angle/360
-	--		rspr(196*8,0,300,300,sa,64,64,32,32)
-				rspr(12*8,0,32,32,sa,64,64,46,46)
-			gear_angle -= gear_speed
-		end
+--		if player.locx == 0 then
+--			local sa = gear_angle/360
+--				rspr(12*8,0,32,32,sa,64,64,46,46)
+--			gear_angle -= gear_speed
+--		end
 		-- minigame ui
 		draw_minigame_ui()
 		
@@ -109,6 +111,54 @@ function bullet_create(x,y,dx,dy,sprite,ttl,w,h)
 			start=ttl,
 		}
 	)
+end
+
+function spiral_create(x,y,dx,dy,i,n,lt)
+	local sp = 17
+	local width  = 4
+	local height = 4
+	add(spirals, {
+			x=x,   y=y,
+			dx=dx, dy=dy,
+			w=width, h=height,
+			sprite=sp,
+			lifetime=lt,
+			a=i/n,
+			dead=false,
+		}
+	)
+end
+
+function spiral_move(s)
+	s.x += s.dx * 2
+	s.y += s.dy * 2
+	
+	-- collide player
+	-- shift hitbox to centerplayer.x += 2
+	player.x += 2
+	player.y += 2
+	local hit = collide(player, s)
+	player.x -= 2
+	player.y -= 2
+	if hit and not player.hit then
+		player_hurt()
+	end
+	player.hit = hit
+	
+	s.a += 0.01
+	s.dx = cos(s.a) 
+	s.dy = sin(s.a)
+	
+	-- screen edges
+	if s.lifetime < 1 then
+		s.dead = true
+	else
+		s.lifetime -= 1
+	end
+	
+	if s.dead then
+		del(spirals, s)
+	end
 end
 
 function bullet_move(b)
@@ -175,6 +225,43 @@ function bullet_draw(b)
 	
 end
 
+function draw_aim_laser(t)
+	local b = boss
+	local angle_deg = t.i / t.n * 360
+	local angle_rad = angle_deg * pi/180
+	
+	local dx = cos(angle_rad+t.s) 
+	local dy = sin(angle_rad+t.s)
+	t.x = b.x - 2 + dx * t.r
+	t.y = b.y - 2 + dy * t.r
+	t.i += 1
+	
+	line(b.x,b.y, t.x,t.y, 8)
+	if t.i > t.n/12 then
+		del(aim_lasers, t)
+	end
+	
+	if laser_hit(b.x,b.y,t.x,t.y) then
+		player_hurt()
+	end
+end
+
+function laser_hit(x1, y1, x2, y2)
+ local px = player.x + 2
+ local py = player.y + 2
+
+ for i=0,1,0.05 do
+  local x = x1 + (x2 - x1) * i
+  local y = y1 + (y2 - y1) * i
+
+  if abs(px - x) < 2 and abs(py - y) < 2 then
+   return true
+  end
+ end
+
+ return false
+end
+
 function draw_square_laser(l)
 	if (l.vivi) return
 	
@@ -187,7 +274,7 @@ function draw_square_laser(l)
 		else
 			pal()
 		end
-		spr(l.sprite, l.x, bly, 2,2)
+		spr(l.sprite, l.x, l.y, 2,2)
 	end
 end
 
@@ -237,8 +324,8 @@ function load_boss(x,y)
 		level=1,
 		cooldown = 30,
 		draw=basic_draw,
-		atk1 = circle_attack,
-		atk2 = arc_attack,
+		spam=0,
+		halfrot=false,
 	}
 	return boss
 end
@@ -261,32 +348,68 @@ function boss_moveset()
 		b.cooldown -= 1
 	end
 	
+	if b.cooldown < 1 and b.spam > 0 then
+		spiral_shot(b.x-4,b.y-4)
+		if b.spam == 1 then
+			b.cooldown = 30*3
+			if (b.half_rot) b.half_rot=false
+		else
+			b.cooldown = 1
+		end
+		b.spam -= 1
+		if b.half_rot then
+			rotation += 0.5
+		else
+			rotation += 0.2
+		end
+	end
+	
+	
 	if b.cooldown < 1 then
-		-- atacks
 		
 		-- choose attack
 		local r = rnd()
 		
 		if r < 0.1 then
-			b.atk1(b.x, b.y,16)
+			rotation = 0
+			b.spam = 90
+		elseif r < 0.2 then
+			spiral_attack(b.x,b.y,10)
+			b.cooldown = 30*3
+		elseif r < 0.3 then
+			circle_attack(b.x, b.y,16)
+			rotation += 0.1
 			b.cooldown = 30*1
-		elseif r < 0.1 then
-			b.atk2(b.x,b.y,4)
+		elseif r < 0.4 then
+			arc_attack(b.x,b.y,4)
 			b.cooldown = 30*2
-		elseif r < 0.1 then
-			b.atk2(b.x,b.y,8)
+		elseif r < 0.5 then
+			arc_attack(b.x,b.y,8)
 			b.cooldown = 30*3
 		--laser
-		elseif r < 0.1 then
+		elseif r < 0.6 then
 			laser_square_attack(90)
 			b.cooldown = 30*6
-		else
+		elseif r < 0.7 then
+			if rnd() < 0.5 then
+				laser_go_vivi()
+			else
+				laser_go_vivi(1)
+			end
+			b.cooldown = 30*6
+		elseif r < 0.8 then
 			laser_go_vivi()
 			laser_go_vivi(1)
 			b.cooldown = 30*6
+		elseif r < 0.9 then
+			b.half_rot = true
+			rotation = 0
+			b.spam = 90
+		else
+			aim_laser()
+			b.cooldown = 30*2
 		end
 	end
-	
 	
 	if b.dead then
 		b = nil
@@ -305,8 +428,62 @@ function basic_draw()
 end
 
 -- atacks!!!
+
+function spiral_shot(x, y)
+	local dx = cos(rotation)
+	local dy = sin(rotation)
+
+	bullet_create(x, y, dx, dy)
+
+	rotation += 0.02
+end
+
+function spiral_spam(x,y,n)
+	local angle_deg = 0
+	local angle_rad = 0
+	local bx, by = 0
+	local dx, dy=0
+	local radius = 8
+	
+	local angle = 360
+	
+	for i=1,n do
+		angle_deg = i / n * angle + rotation
+		angle_rad = angle_deg * pi/180
+		dx = cos(angle_rad) 
+		dy = sin(angle_rad)
+		-- position
+		bx = x-2 + dx * radius
+		by = y-2 + dy * radius
+		
+		bullet_create(bx,by,dx,dy)
+	end
+end
+
+function spiral_attack(x,y,n)
+	local angle_deg = 0
+	local angle_rad = 0
+	local bx, by = 0
+	local dx, dy=0
+	local radius = 8
+	
+	local angle = 360
+	
+	for i=1,n do
+		angle_deg = i / n * 360 + rotation
+		angle_rad = angle_deg * pi/180
+		dx = cos(angle_rad) 
+		dy = sin(angle_rad)
+		-- position
+		bx = x-2 + dx * radius
+		by = y-2 + dy * radius
+		
+		spiral_create(bx,by,dx,dy,i,n,90)
+	end
+end
+
 function circle_attack(x,y,n)
-		local angle_deg = 0
+	local angle_deg = 0
 	local angle_rad = 0
 	local bx, by = 0
 	local dx, dy=0
@@ -390,6 +567,37 @@ function laser_go_vivi(vertical)
 	end
 end
 
+function aim_laser()
+	local p = player
+	local b = boss
+	local t = {x=0,
+		y=0,
+		i=0,
+		n=360,
+		r=90,
+		s=0
+	}
+	
+	local px = player.x - player.locx
+	local py = player.y - player.locy
+	local start = 0
+	if px <= 64 then
+		if py <= 64 then
+			start = pi
+		else
+			start = pi*2
+		end
+	else
+		if py >= 64 then
+			start = pi*3
+		else
+			start = pi/4
+		end
+	end
+	t.s = start
+
+	add(aim_lasers, t)
+end
 -->8
 -- player
 
@@ -433,7 +641,9 @@ function player_init()
 		x=0, y=0,
 	}
 	bullets = {}
-	moving_lasers = {}
+	spirals = {}
+	aim_lasers = {}
+	rotation = 0
 end
 
 function player_buttons()
@@ -1050,10 +1260,10 @@ __gfx__
 0000000000d00d0000d00d0000d00d0000d00d008780000000000000000000000000000000000000000000000000000000000055666555222255566655000000
 00000000000000007000000078787878787878787880000000aaaa0000aaaa0000aaaa0000aaaa00000044000000000000000527565222222222256572500000
 0000000000000000800000000000000000000000878000000aa55aa00aa55aa00aa5aaa00aaa5aa0000444400000000000000572252225555552225227500000
-000000000000000070000000000000000000000088700000aa5555aaaaa55aaaaa55aaaaaaaa55aa004446400000000000006652222256666665222225660000
-00000000000aa00080000000000000000000000087800000a555555aaaa55aaaa555555aa555555a044446400000000000006665222566666666522256660000
-00000000000aa00070000000000000000000000078800000aaa55aaaa555555aa555555aa555555a046446400000000000066665225666666666652225666000
-000000000000000080000000000000000000000087800000aaa55aaaaa5555aaaa55aaaaaaaa55aa046446400000000000066652256666655666665225666000
+000000000009900070000000000000000000000088700000aa5555aaaaa55aaaaa55aaaaaaaa55aa004446400000000000006652222256666665222225660000
+00000000009aa90080000000000000000000000087800000a555555aaaa55aaaa555555aa555555a044446400000000000006665222566666666522256660000
+00000000009aa90070000000000000000000000078800000aaa55aaaa555555aa555555aa555555a046446400000000000066665225666666666652225666000
+000000000009900080000000000000000000000087800000aaa55aaaaa5555aaaa55aaaaaaaa55aa046446400000000000066652256666655666665225666000
 0000000000000000700000000000000000000000887000000aa55aa00aa55aa00aa5aaa00aaa5aa0044664400000000000055522256666577566665222555000
 00000000000000008000000000000000000000008780000000aaaa0000aaaa0000aaaa0000aaaa0000444400000000000005272225666577e256665222725000
 17777777777777777000000000000000000000000000000000aaaa0000aaaa0000aaaa0000aaaa000000440000000000000572222566657e2256665222275000
