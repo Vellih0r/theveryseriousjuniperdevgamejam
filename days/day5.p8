@@ -10,7 +10,7 @@ function _init()
 	gamestate = "game"
 	
 	boss = nil
-	boss = load_boss(63,63)
+	boss_dead = false
 
 	coil_num = 132
 	gear_angle = 0
@@ -18,6 +18,11 @@ function _init()
 end
 
 function _update()
+--	if player.locx == 256 and player.locy == 128
+		if not boss and not boss_dead
+		then
+		boss = load_boss(player.locx+63,player.locy+63)
+	end
 
 	-- get target for hook
 	if boss then
@@ -87,9 +92,12 @@ function _draw()
 		draw_minigame_ui()
 		
 		elseif gamestate == "gameover" then
-				print("you died bitch", 38, 54, 8)
-    print("the city will never be awaken", 8, 64, 9)
-    print("press ❎ to restart", 28, 74, 7)
+				print("you died bitch", player.locx+38, player.locy+54, 8)
+    print("the city will never be awaken", player.locx+8, player.locy+64, 9)
+    print("press ❎ to restart", player.locx+28, player.locy+74, 7)
+		end
+		if boss then
+		print(boss.cooldown,player.x,player.y,8)
 		end
 end
 
@@ -325,7 +333,7 @@ function load_boss(x,y)
 		cooldown = 30,
 		draw=basic_draw,
 		spam=0,
-		halfrot=false,
+		half_rot=false,
 	}
 	return boss
 end
@@ -340,6 +348,7 @@ function boss_moveset()
 	-- death condition
 	if b.cur_parts < 1 then
 		b.dead = true
+		boss_dead = true
 		-- animation
 	end
 	
@@ -537,8 +546,10 @@ end
 function laser_square_attack(ttl)
 	-- sprite
 	local laser = 18
-	for x=1,120,16 do
-		for y=1,120,16 do
+	local sx = player.locx
+	local sy = player.locy
+	for x=sx,sx+120,16 do
+		for y=sy,sy+120,16 do
 			bullet_create(x,y,0,0,19,ttl,8,1)
 			bullet_create(x,y,0,0,18,ttl,1,8)
 		end
@@ -548,13 +559,15 @@ end
 function laser_go_vivi(vertical)
 	
 	local ttl = 300
+	local sx = player.locx
+	local sy = player.locy
 	
 	local idx = #bullets
-	for i=0,120,16 do
+	for i=sx,sx+120,16 do
 		idx += 1
 		
 		if not vertical then
-			bullet_create(0,i,1,0,5,ttl,1,8)
+			bullet_create(0,i-128,1,0,5,ttl,1,8)
 			
 			local laser = bullets[idx]
 			laser.vivi = "vertical"
@@ -603,12 +616,12 @@ end
 
 function player_init()
 	player ={
-		x=2,  y=20,
+		x=4,  y=168,
 		dx=0, dy=0,
 		last_dx = 0,
 		last_dy = 0,
 		w=4, h=4,
-		speed = 1,
+		speed = 4,
 		max_speed = 1,
 		max_hp = 3,
 		cur_hp = 3,
@@ -1141,8 +1154,8 @@ end
 function display_hp()
 	local curhp = player.cur_hp
 	local maxhp = player.max_hp
-	local x = 70
-	local y = 1
+	local x = player.locx+70
+	local y = player.locy+1
 	-- current hp
 	for i=1,curhp do
 		x += 8
@@ -1177,9 +1190,9 @@ function draw_arrows()
 	for arr in all(arrows) do
 		next_sprite_x_pos += 8
 			if arr.filled then 
-				spr(arr.id+ 16,next_sprite_x_pos,104)
+				spr(arr.id+ 16,player.locx+next_sprite_x_pos,player.locy+104)
 			else
-				spr(arr.id,next_sprite_x_pos,104)
+				spr(arr.id,player.locx+next_sprite_x_pos,player.locy+104)
 			end
 	end
 end
@@ -1218,7 +1231,7 @@ function minigame_gameplay()
 end
 
 function draw_coil()
-	spr(coil_num,105,1,2,2)
+	spr(coil_num,player.locx+105,player.locy+1,2,2)
 end
 
 
@@ -1260,10 +1273,10 @@ __gfx__
 0000000000d00d0000d00d0000d00d0000d00d00878000000000000000000000ddddddddd80dab0dd80dab0ddddddddd00000055666555222255566655000000
 65555556000000007000000078787878787878787880000000aaaa0000aaaa0000aaaa0000aaaa0000004400d111111600000527565222222222256572500000
 dddddddd00000000800000000000000000000000878000000aa55aa00aa55aa00aa5aaa00aaa5aa000044440d111112500000572252225555552225227500000
-111111110000000070000000000000000000000088700000aa5555aaaaa55aaaaa55aaaaaaaa55aa00444640d111221500006652222256666665222225660000
-11111111000aa00080000000000000000000000087800000a555555aaaa55aaaa555555aa555555a04444640d222111500006665222566666666522256660000
-11111111000aa00070000000000000000000000078800000aaa55aaaa555555aa555555aa555555a04644640d222111500066665225666666666652225666000
-111111110000000080000000000000000000000087800000aaa55aaaaa5555aaaa55aaaaaaaa55aa04644640d111221500066652256666655666665225666000
+111111110009900070000000000000000000000088700000aa5555aaaaa55aaaaa55aaaaaaaa55aa00444640d111221500006652222256666665222225660000
+11111111009aa90080000000000000000000000087800000a555555aaaa55aaaa555555aa555555a04444640d222111500006665222566666666522256660000
+11111111009aa90070000000000000000000000078800000aaa55aaaa555555aa555555aa555555a04644640d222111500066665225666666666652225666000
+111111110009900080000000000000000000000087800000aaa55aaaaa5555aaaa55aaaaaaaa55aa04644640d111221500066652256666655666665225666000
 1111111100000000700000000000000000000000887000000aa55aa00aa55aa00aa5aaa00aaa5aa004466440d111112500055522256666577566665222555000
 11111111000000008000000000000000000000008780000000aaaa0000aaaa0000aaaa0000aaaa0000444400d11111160005272225666577e256665222725000
 1777777777777777700000001111111dd1111111dddddddd00aaaa0000aaaa0000aaaa0000aaaa00000044006111111d000572222566657e2256665222275000
